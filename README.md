@@ -1,4 +1,4 @@
-# Twitter Spread Analyzer
+# information-checker / Twitter Spread Analyzer
 
 A comprehensive tool for analyzing information spread patterns on Twitter, designed for cognitive warfare and information manipulation detection.
 
@@ -31,8 +31,8 @@ A comprehensive tool for analyzing information spread patterns on Twitter, desig
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd twitter-spread-analyzer
+git clone https://github.com/zaq2989/information-checker.git
+cd information-checker/twitter-spread-analyzer
 ```
 
 2. Copy environment configuration:
