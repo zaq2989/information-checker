@@ -90,9 +90,9 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
+// Health check - simple and lightweight for Railway
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).send('ok');
 });
 
 // API routes
@@ -157,7 +157,7 @@ if (!NO_DB_MODE && process.env.NO_DB !== 'true') {
 export { io, logger, pgPool, neo4jDriver, cache, analysisEngine };
 
 // Start server - Railway provides PORT env variable
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 async function startServer() {
   try {
@@ -176,8 +176,9 @@ async function startServer() {
       logger.info('Running in NO_DB mode - skipping database connections');
     }
     
-    httpServer.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`);
+    // IMPORTANT: Bind to 0.0.0.0 for Railway/container environments
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      logger.info(`Server running on 0.0.0.0:${PORT}`);
       logger.info('All services initialized successfully');
     });
   } catch (error) {
