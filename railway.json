@@ -2,7 +2,8 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "backend/Dockerfile"
+    "dockerfilePath": "backend/Dockerfile",
+    "dockerContext": "backend"
   },
   "deploy": {
     "numReplicas": 1,
@@ -14,6 +15,6 @@
   },
   "envVars": {
     "NODE_ENV": "production",
-    "NO_DB": "false"
+    "NO_DB": "true"
   }
 }
