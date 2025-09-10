@@ -1,6 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { logger } from '../index';
+
+// Safe logger with fallback to console
+let safeLogger: Pick<Console, 'info' | 'warn' | 'error'> = console;
+try {
+  const indexModule = require('../index');
+  if (indexModule && indexModule.logger) {
+    safeLogger = indexModule.logger;
+  }
+} catch (e) {
+  // Keep using console as fallback
+}
 
 interface StoredData {
   id: string;
@@ -22,15 +32,17 @@ export class DataStorageService {
   private searchesDir: string;
   private analysesDir: string;
   private cacheDir: string;
+  private initialized: boolean = false;
 
   private constructor() {
-    // Set up data directories
-    this.dataDir = path.join(process.cwd(), 'data');
+    // Use absolute paths in container environment
+    const baseDir = process.env.NODE_ENV === 'production' ? '/app/data' : path.join(process.cwd(), 'data');
+    this.dataDir = baseDir;
     this.searchesDir = path.join(this.dataDir, 'searches');
     this.analysesDir = path.join(this.dataDir, 'analyses');
     this.cacheDir = path.join(this.dataDir, 'cache');
     
-    this.ensureDirectories();
+    // Don't create directories in constructor - call init() explicitly
   }
 
   static getInstance(): DataStorageService {
@@ -40,11 +52,18 @@ export class DataStorageService {
     return DataStorageService.instance;
   }
 
+  public init(): void {
+    if (!this.initialized) {
+      this.ensureDirectories();
+      this.initialized = true;
+    }
+  }
+
   private ensureDirectories(): void {
     [this.dataDir, this.searchesDir, this.analysesDir, this.cacheDir].forEach(dir => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
-        logger.info(`Created directory: ${dir}`);
+        safeLogger.info(`Created directory: ${dir}`);
       }
     });
   }
@@ -67,7 +86,7 @@ export class DataStorageService {
       };
       
       await fs.promises.writeFile(filepath, JSON.stringify(storedData, null, 2));
-      logger.info(`Saved search data: ${filepath}`);
+      safeLogger.info(`Saved search data: ${filepath}`);
       
       // Also save a summary in index file
       await this.updateIndex('searches', {
@@ -81,7 +100,7 @@ export class DataStorageService {
       
       return id;
     } catch (error) {
-      logger.error('Failed to save search data:', error);
+      safeLogger.error('Failed to save search data:', error);
       throw error;
     }
   }
@@ -102,7 +121,7 @@ export class DataStorageService {
       };
       
       await fs.promises.writeFile(filepath, JSON.stringify(storedData, null, 2));
-      logger.info(`Saved analysis data: ${filepath}`);
+      safeLogger.info(`Saved analysis data: ${filepath}`);
       
       // Update index
       await this.updateIndex('analyses', {
@@ -113,7 +132,7 @@ export class DataStorageService {
         keyword: data.keyword
       });
     } catch (error) {
-      logger.error('Failed to save analysis data:', error);
+      safeLogger.error('Failed to save analysis data:', error);
       throw error;
     }
   }
@@ -130,7 +149,7 @@ export class DataStorageService {
       const index = JSON.parse(await fs.promises.readFile(indexFile, 'utf-8'));
       return index.slice(-limit).reverse();
     } catch (error) {
-      logger.error('Failed to get search history:', error);
+      safeLogger.error('Failed to get search history:', error);
       return [];
     }
   }
@@ -154,7 +173,7 @@ export class DataStorageService {
       
       return null;
     } catch (error) {
-      logger.error('Failed to get search data:', error);
+      safeLogger.error('Failed to get search data:', error);
       return null;
     }
   }
@@ -171,7 +190,7 @@ export class DataStorageService {
       const index = JSON.parse(await fs.promises.readFile(indexFile, 'utf-8'));
       return index.slice(-limit).reverse();
     } catch (error) {
-      logger.error('Failed to get analysis history:', error);
+      safeLogger.error('Failed to get analysis history:', error);
       return [];
     }
   }
@@ -189,11 +208,11 @@ export class DataStorageService {
         
         if (now - stats.mtime.getTime() > maxAge) {
           await fs.promises.unlink(filepath);
-          logger.info(`Cleaned old cache file: ${file}`);
+          safeLogger.info(`Cleaned old cache file: ${file}`);
         }
       }
     } catch (error) {
-      logger.error('Failed to clean cache:', error);
+      safeLogger.error('Failed to clean cache:', error);
     }
   }
 
@@ -228,7 +247,7 @@ export class DataStorageService {
         totalSize: Math.round(totalSize / 1024) // in KB
       };
     } catch (error) {
-      logger.error('Failed to get storage stats:', error);
+      safeLogger.error('Failed to get storage stats:', error);
       return {
         searches: 0,
         analyses: 0,
@@ -253,7 +272,7 @@ export class DataStorageService {
       try {
         index = JSON.parse(await fs.promises.readFile(indexFile, 'utf-8'));
       } catch (error) {
-        logger.warn('Failed to read index file, creating new one');
+        safeLogger.warn('Failed to read index file, creating new one');
       }
     }
     
@@ -294,11 +313,11 @@ export class DataStorageService {
       const filepath = path.join(this.dataDir, filename);
       
       await fs.promises.writeFile(filepath, csv);
-      logger.info(`Exported searches to: ${filepath}`);
+      safeLogger.info(`Exported searches to: ${filepath}`);
       
       return filepath;
     } catch (error) {
-      logger.error('Failed to export searches:', error);
+      safeLogger.error('Failed to export searches:', error);
       throw error;
     }
   }

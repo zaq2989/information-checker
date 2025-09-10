@@ -11,9 +11,13 @@ dotenv.config();
 // In-memory storage for mock data
 const mockAnalyses = new Map<string, any>();
 
-// Initialize services
-const rateLimiter = RateLimitService.getInstance();
-const dataStorage = DataStorageService.getInstance();
+// Lazy initialization of services
+const getRateLimiter = () => RateLimitService.getInstance();
+const getDataStorage = () => {
+  const storage = DataStorageService.getInstance();
+  storage.init(); // Ensure directories are created
+  return storage;
+};
 const bearerToken = process.env.TWITTER_BEARER_TOKEN || '';
 const twitterClient = bearerToken ? new TwitterApi(bearerToken).readOnly : null;
 
@@ -204,20 +208,20 @@ export const searchTwitter = async (req: Request, res: Response) => {
     const cacheKey = `${keyword}`;
     
     // Check cache first
-    const cached = rateLimiter.getCachedResponse(endpoint, cacheKey);
+    const cached = getRateLimiter().getCachedResponse(endpoint, cacheKey);
     if (cached) {
       return res.json({
         ...cached,
         fromCache: true,
-        rateLimit: rateLimiter.getRateLimitInfo(endpoint)
+        rateLimit: getRateLimiter().getRateLimitInfo(endpoint)
       });
     }
     
     // Try real API if available and rate limit allows
-    if (useReal === 'true' && twitterClient && rateLimiter.canMakeRequest(endpoint)) {
+    if (useReal === 'true' && twitterClient && getRateLimiter().canMakeRequest(endpoint)) {
       try {
         logger.info(`Attempting real Twitter API call for: ${keyword}`);
-        rateLimiter.recordRequest(endpoint);
+        getRateLimiter().recordRequest(endpoint);
         
         const tweets = await twitterClient.v2.search(keyword as string, {
           max_results: 10,
@@ -248,15 +252,15 @@ export const searchTwitter = async (req: Request, res: Response) => {
         };
         
         // Cache the result
-        rateLimiter.cacheResponse(endpoint, cacheKey, result);
+        getRateLimiter().cacheResponse(endpoint, cacheKey, result);
         
         // Save to persistent storage
-        const storageId = await dataStorage.saveSearchData(keyword as string, result, 'twitter-api');
+        const storageId = await getDataStorage().saveSearchData(keyword as string, result, 'twitter-api');
         
         return res.json({
           ...result,
           storageId,
-          rateLimit: rateLimiter.getRateLimitInfo(endpoint)
+          rateLimit: getRateLimiter().getRateLimitInfo(endpoint)
         });
       } catch (apiError: any) {
         logger.warn('Twitter API call failed, falling back to mock:', apiError.message);
@@ -273,12 +277,12 @@ export const searchTwitter = async (req: Request, res: Response) => {
     };
     
     // Save mock data to storage
-    const storageId = await dataStorage.saveSearchData(keyword as string, result, 'mock');
+    const storageId = await getDataStorage().saveSearchData(keyword as string, result, 'mock');
     
     res.json({
       ...result,
       storageId,
-      rateLimit: rateLimiter.getRateLimitInfo(endpoint)
+      rateLimit: getRateLimiter().getRateLimitInfo(endpoint)
     });
   } catch (error) {
     logger.error('Failed to search Twitter:', error);
@@ -310,7 +314,7 @@ export const checkFacts = async (req: Request, res: Response) => {
 export const getSearchHistory = async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
-    const history = await dataStorage.getSearchHistory(limit);
+    const history = await getDataStorage().getSearchHistory(limit);
     
     res.json({
       count: history.length,
@@ -324,7 +328,7 @@ export const getSearchHistory = async (req: Request, res: Response) => {
 
 export const getStorageStats = async (req: Request, res: Response) => {
   try {
-    const stats = await dataStorage.getStorageStats();
+    const stats = await getDataStorage().getStorageStats();
     
     res.json(stats);
   } catch (error) {
@@ -336,7 +340,7 @@ export const getStorageStats = async (req: Request, res: Response) => {
 export const getStoredSearch = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const data = await dataStorage.getSearchData(id);
+    const data = await getDataStorage().getSearchData(id);
     
     if (!data) {
       return res.status(404).json({ error: 'Search data not found' });
@@ -351,7 +355,7 @@ export const getStoredSearch = async (req: Request, res: Response) => {
 
 export const exportData = async (req: Request, res: Response) => {
   try {
-    const filepath = await dataStorage.exportSearchesAsCSV();
+    const filepath = await getDataStorage().exportSearchesAsCSV();
     
     res.json({
       message: 'Data exported successfully',

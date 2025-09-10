@@ -161,6 +161,12 @@ const PORT = Number(process.env.PORT) || 3001;
 
 async function startServer() {
   try {
+    // Initialize DataStorageService
+    const { DataStorageService } = require('./services/DataStorageService');
+    const dataStorage = DataStorageService.getInstance();
+    dataStorage.init();
+    logger.info('DataStorageService initialized');
+    
     // Skip database initialization if NO_DB flag is set
     if (!NO_DB_MODE && process.env.NO_DB !== 'true' && pgPool && neo4jDriver) {
       // Initialize database schemas
