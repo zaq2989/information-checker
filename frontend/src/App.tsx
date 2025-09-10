@@ -39,11 +39,20 @@ function App() {
     setLoading(true);
     setError(null);
     try {
+      console.log('Starting analysis for keyword:', keyword);
       const data = await apiService.createAnalysis('keyword', { keyword });
+      console.log('Analysis created with ID:', data.id);
+      
+      if (!data.id) {
+        throw new Error('No analysis ID received from server');
+      }
+      
       setAnalysisId(data.id);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to start analysis:', error);
-      setError('Failed to start analysis. Please try again.');
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to start analysis. Please try again.';
+      setError(errorMessage);
+      alert(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -102,7 +111,20 @@ function App() {
               </Box>
             </Paper>
           ) : (
-            <Dashboard analysisId={analysisId} />
+            <>
+              <Box sx={{ mb: 2, p: 2 }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => {
+                    setAnalysisId(null);
+                    setKeyword('');
+                  }}
+                >
+                  ← Back to Search
+                </Button>
+              </Box>
+              <Dashboard analysisId={analysisId} />
+            </>
           )}
         </Container>
       </Box>

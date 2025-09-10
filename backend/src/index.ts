@@ -19,10 +19,28 @@ dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
+
+// CORS configuration for production
+const corsOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+  'http://localhost:5177',
+  'https://*.vercel.app',
+  'https://information-checker.vercel.app',
+  'https://information-checker-*.vercel.app'
+];
+
+if (process.env.FRONTEND_URL) {
+  corsOrigins.push(process.env.FRONTEND_URL);
+}
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST']
+    origin: corsOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
@@ -40,8 +58,34 @@ const logger = winston.createLogger({
 });
 
 // Middleware
-app.use(helmet());
-app.use(cors());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin matches any of our allowed patterns
+    const allowedPatterns = [
+      /^http:\/\/localhost:\d+$/,
+      /^https:\/\/.*\.vercel\.app$/,
+      /^https:\/\/information-checker.*\.vercel\.app$/
+    ];
+    
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin)) ||
+                      corsOrigins.includes(origin);
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -82,7 +126,10 @@ let neo4jDriver: any = null;
 let cache: CacheService | null = null;
 let analysisEngine: AnalysisEngine | null = null;
 
-if (process.env.NO_DB !== 'true') {
+// Database mode configuration - can be overridden by environment variable
+const NO_DB_MODE = process.env.NO_DB === 'true' || process.env.NODE_ENV === 'development';
+
+if (!NO_DB_MODE && process.env.NO_DB !== 'true') {
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL || 
       `postgresql://analyzer:${process.env.POSTGRES_PASSWORD}@localhost:5432/twitter_analyzer`
@@ -109,13 +156,13 @@ if (process.env.NO_DB !== 'true') {
 // Export for use in other modules
 export { io, logger, pgPool, neo4jDriver, cache, analysisEngine };
 
-// Start server
-const PORT = process.env.PORT || 3000;
+// Start server - Railway provides PORT env variable
+const PORT = process.env.PORT || 3001;
 
 async function startServer() {
   try {
     // Skip database initialization if NO_DB flag is set
-    if (process.env.NO_DB !== 'true' && pgPool && neo4jDriver) {
+    if (!NO_DB_MODE && process.env.NO_DB !== 'true' && pgPool && neo4jDriver) {
       // Initialize database schemas
       const dbInit = new DatabaseInitializer(pgPool, neo4jDriver, logger);
       await dbInit.initialize();

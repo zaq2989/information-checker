@@ -17,28 +17,29 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
 }) => {
   const cyRef = useRef<cytoscape.Core | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   const elements = [
     // Nodes
-    ...data.nodes.map(node => ({
+    ...(data.nodes || []).map(node => ({
       data: { 
-        id: node.accountId,
-        label: node.accountId.substring(0, 8) + '...',
-        type: node.type,
-        influence: node.influence
+        id: node.id || '',  // Use node.id directly as provided by backend
+        label: (node.accountId || node.id || '').substring(0, 8) + '...',
+        type: node.type || 'default',
+        influence: node.influence || 0
       },
-      classes: node.type
+      classes: node.type || 'default'
     })),
     // Edges
-    ...data.edges.map(edge => ({
+    ...(data.edges || []).map(edge => ({
       data: {
-        id: `${edge.source}-${edge.target}`,
-        source: edge.source,
-        target: edge.target,
-        type: edge.type,
-        weight: edge.weight
+        id: `${edge.source || ''}-${edge.target || ''}`,
+        source: edge.source || '',
+        target: edge.target || '',
+        type: edge.type || 'default',
+        weight: edge.weight || 1
       },
-      classes: edge.type
+      classes: edge.type || 'default'
     }))
   ];
 
@@ -123,35 +124,55 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
 
   const layout = {
     name: 'cose',
-    animate: true,
-    animationDuration: 1000,
+    animate: false,  // Disable animation to prevent errors
+    fit: true,
+    padding: 30,
     nodeRepulsion: 400000,
     idealEdgeLength: 100,
     edgeElasticity: 100,
     nestingFactor: 5,
     gravity: 80,
-    numIter: 1000,
+    numIter: 500,
     initialTemp: 200,
     coolingFactor: 0.95,
     minTemp: 1.0
   };
 
   useEffect(() => {
+    mountedRef.current = true;
+    
     if (cyRef.current) {
-      cyRef.current.on('tap', 'node', (evt) => {
+      const handleNodeClick = (evt: any) => {
+        if (!mountedRef.current) return;
         const nodeId = evt.target.id();
         setSelectedNode(nodeId);
         if (onNodeClick) {
           onNodeClick(nodeId);
         }
-      });
-
-      cyRef.current.on('tap', (evt) => {
+      };
+      
+      const handleBackgroundClick = (evt: any) => {
+        if (!mountedRef.current) return;
         if (evt.target === cyRef.current) {
           setSelectedNode(null);
         }
-      });
+      };
+      
+      cyRef.current.on('tap', 'node', handleNodeClick);
+      cyRef.current.on('tap', handleBackgroundClick);
+      
+      return () => {
+        mountedRef.current = false;
+        if (cyRef.current) {
+          cyRef.current.removeListener('tap', 'node', handleNodeClick);
+          cyRef.current.removeListener('tap', handleBackgroundClick);
+        }
+      };
     }
+    
+    return () => {
+      mountedRef.current = false;
+    };
   }, [onNodeClick]);
 
   const stats = {
@@ -189,7 +210,11 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
           style={{ width: '100%', height: '100%' }}
           stylesheet={stylesheet}
           layout={layout}
-          cy={(cy) => { cyRef.current = cy }}
+          cy={(cy) => {
+            if (mountedRef.current) {
+              cyRef.current = cy;
+            }
+          }}
         />
       </Box>
 
